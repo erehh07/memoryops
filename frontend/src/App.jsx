@@ -28,9 +28,7 @@ export default function App() {
     }
   }, [batchId]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   const run = async (label, fn, done) => {
     setBusy(label);
@@ -50,30 +48,35 @@ export default function App() {
   const localMemory = status?.memory?.backend === "local";
 
   return (
-    <div className="min-h-screen text-slate-800">
+    <div className="min-h-screen bg-slate-50 text-slate-800">
+
+      {/* ── Header ── */}
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-          <div className="mr-auto">
-            <h1 className="text-xl font-semibold tracking-tight">
-              MemoryOps <span className="text-slate-400 font-normal">· AP exception agent</span>
-            </h1>
-            <p className="text-xs text-slate-500">
-              Recommends only. A human approves every decision. Nothing is paid or posted.
-            </p>
+        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-4">
+          {/* Brand */}
+          <div className="flex items-baseline gap-2 mr-auto">
+            <span className="text-sm font-semibold tracking-tight text-slate-900">MemoryOps</span>
+            <span className="hidden sm:inline text-xs text-slate-400">AP Exception Agent</span>
           </div>
+
+          {/* Status dots */}
           {status && (
-            <>
-              <Badge
-                tone={localMemory ? "amber" : "emerald"}
-                title={status.memory.detail}
-              >
-                {localMemory ? "Memory: local fallback" : "Memory: Hindsight"}
-              </Badge>
-              <Badge tone={status.llm.mode === "groq" ? "emerald" : "amber"} title={status.llm.detail}>
-                {status.llm.mode === "groq" ? `LLM: ${status.llm.models[0]}` : "LLM: offline (deterministic)"}
-              </Badge>
-            </>
+            <div className="flex items-center gap-3">
+              <StatusDot
+                ok={!localMemory}
+                okLabel="Hindsight"
+                failLabel="Local memory"
+                detail={status.memory.detail}
+              />
+              <StatusDot
+                ok={status.llm.mode === "groq"}
+                okLabel="Groq"
+                failLabel="Offline LLM"
+                detail={status.llm.detail}
+              />
+            </div>
           )}
+
           <Button
             variant="ghost"
             disabled={!!busy}
@@ -85,117 +88,109 @@ export default function App() {
             Reset demo
           </Button>
         </div>
+
+        {/* Hindsight fallback notice */}
         {localMemory && (
           <div className="bg-amber-50 border-t border-amber-200 text-amber-900 text-xs">
             <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center gap-3">
-              <span>
-                Hindsight is not in use ({status.memory.detail}). Precedents are stored in the local fallback store.
-              </span>
+              <span>Hindsight unavailable — {status.memory.detail}. Precedents stored in local fallback.</span>
               <button
-                className="underline"
+                className="underline underline-offset-2"
                 onClick={() => run("reconnect", api.reconnect, (s) => `Memory backend: ${s.backend}`)}
               >
-                Retry Hindsight
+                Retry
               </button>
             </div>
           </div>
         )}
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-4 grid gap-4 lg:grid-cols-[320px_1fr]">
+      {/* ── Body ── */}
+      <main className="max-w-7xl mx-auto px-4 py-5 grid gap-5 lg:grid-cols-[280px_1fr]">
+
+        {/* ── Sidebar ── */}
         <aside className="space-y-4">
-          <section className="bg-white rounded-lg border border-slate-200 p-3">
-            <h2 className="text-sm font-semibold mb-2">Invoice batches</h2>
-            <div className="space-y-2">
-              {batches.map((b) => (
-                <button
-                  key={b.batch_id}
-                  onClick={() => {
-                    setBatchId(b.batch_id);
-                    setSelected(null);
-                    setTab("exceptions");
-                  }}
-                  className={`w-full text-left rounded-md border px-3 py-2 transition ${
-                    b.batch_id === batchId ? "border-indigo-400 bg-indigo-50" : "border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex justify-between text-sm font-medium">
-                    <span>{b.name}</span>
-                    <span className={b.status === "processed" ? "text-emerald-600" : "text-slate-400"}>
-                      {b.status === "processed" ? "processed" : "new"}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    {b.invoices} invoices
-                    {b.status === "processed" && (
-                      <>
-                        {" "}· {b.exceptions} exceptions · {b.decided}/{b.exceptions} decided
-                      </>
-                    )}
-                  </div>
-                </button>
-              ))}
+
+          {/* Batch list */}
+          <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-slate-100">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Invoice Batches</p>
             </div>
-            {batch && (
-              <div className="mt-3 space-y-2">
-                {batch.status !== "processed" ? (
-                  <Button
-                    className="w-full"
-                    disabled={!!busy}
-                    onClick={() =>
-                      run(
-                        "process",
-                        () => api.process(batchId),
-                        (r) => `Matched ${r.invoices} invoices, found ${r.exceptions} exceptions, recommended ${r.recommended}.`
-                      )
-                    }
+            <div className="divide-y divide-slate-100">
+              {batches.map((b) => {
+                const active = b.batch_id === batchId;
+                const done = b.status === "processed";
+                const allDecided = done && b.decided === b.exceptions;
+                return (
+                  <button
+                    key={b.batch_id}
+                    onClick={() => { setBatchId(b.batch_id); setSelected(null); setTab("exceptions"); }}
+                    className={`w-full text-left px-3 py-2.5 flex gap-2 items-start transition-colors
+                      ${active ? "bg-indigo-50 border-l-2 border-l-indigo-500" : "border-l-2 border-l-transparent hover:bg-slate-50"}`}
                   >
-                    {busy === "process" ? "Matching & recommending…" : "Run three-way match"}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-slate-800 truncate">{b.name}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {done
+                          ? `${b.exceptions} exceptions · ${b.decided}/${b.exceptions} decided`
+                          : `${b.invoices} invoices · not processed`}
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium mt-0.5 shrink-0 ${
+                      allDecided ? "text-emerald-600" : done ? "text-amber-600" : "text-slate-400"
+                    }`}>
+                      {allDecided ? "Complete" : done ? "In review" : "New"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Batch actions */}
+            {batch && (
+              <div className="px-3 py-2.5 border-t border-slate-100 space-y-2">
+                {batch.status !== "processed" ? (
+                  <Button className="w-full" disabled={!!busy}
+                    onClick={() => run("process", () => api.process(batchId),
+                      (r) => `Matched ${r.invoices} invoices · ${r.exceptions} exceptions · ${r.recommended} recommendations`)}>
+                    {busy === "process" ? "Running match…" : "Run three-way match"}
                   </Button>
                 ) : (
                   <>
-                    <Button
-                      className="w-full"
-                      variant="secondary"
-                      disabled={!!busy || batch.decided === batch.exceptions}
-                      onClick={() =>
-                        run(
-                          "replay",
-                          () => api.replay(batchId),
-                          (r) =>
-                            `Replayed ${r.applied} senior decisions into memory` +
-                            (r.no_senior_decision.length ? ` (${r.no_senior_decision.length} have no senior decision)` : "")
-                        )
-                      }
-                    >
-                      {busy === "replay" ? "Teaching the agent…" : "Replay seniors' decisions"}
+                    <Button className="w-full" variant="secondary" disabled={!!busy || batch.decided === batch.exceptions}
+                      onClick={() => run("replay", () => api.replay(batchId),
+                        (r) => `Replayed ${r.applied} senior decisions` +
+                          (r.no_senior_decision.length ? ` (${r.no_senior_decision.length} skipped)` : ""))}>
+                      {busy === "replay" ? "Replaying…" : "Replay seniors' decisions"}
                     </Button>
-                    <Button
-                      className="w-full"
-                      variant="ghost"
-                      disabled={!!busy || batch.decided === batch.exceptions}
-                      onClick={() => run("rerun", () => api.rerun(batchId), (r) => `Re-ran ${r.recommended} recommendations with current memory.`)}
-                    >
-                      {busy === "rerun" ? "Recalling & recommending…" : "Re-run open recommendations"}
+                    <Button className="w-full" variant="ghost" disabled={!!busy || batch.decided === batch.exceptions}
+                      onClick={() => run("rerun", () => api.rerun(batchId),
+                        (r) => `Re-ran ${r.recommended} recommendations`)}>
+                      {busy === "rerun" ? "Recalling…" : "Re-run open recommendations"}
                     </Button>
                   </>
                 )}
               </div>
             )}
-          </section>
+          </div>
 
-          <section className="bg-white rounded-lg border border-slate-200 p-3">
-            <h2 className="text-sm font-semibold">Is it learning?</h2>
-            <p className="text-xs text-slate-500 mb-2">
-              Share of exceptions the agent escalated when the batch arrived, and how often humans agreed with its
-              non-escalated recommendations.
-            </p>
-            <LearningChart batches={batches} />
-          </section>
+          {/* Metrics */}
+          <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-slate-100">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Agent Learning</p>
+              <p className="text-xs text-slate-400 mt-0.5">Escalation rate and human agreement per batch</p>
+            </div>
+            <div className="px-3 py-3">
+              <LearningChart batches={batches} />
+            </div>
+          </div>
         </aside>
 
+        {/* ── Main panel ── */}
         <section className="min-w-0">
-          <nav className="flex flex-wrap gap-1 mb-3">
+
+          {/* Tab bar */}
+          <div className="flex border-b border-slate-200 mb-4">
             {[
               ["exceptions", "Exceptions"],
               ["memory", "Memory inspector"],
@@ -204,25 +199,32 @@ export default function App() {
               <button
                 key={k}
                 onClick={() => setTab(k)}
-                className={`px-3 py-1.5 text-sm rounded-md ${
-                  tab === k ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-200"
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  tab === k
+                    ? "border-indigo-600 text-indigo-700"
+                    : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
                 }`}
               >
                 {label}
               </button>
             ))}
-          </nav>
+          </div>
 
-          {error && <div className="mb-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm px-3 py-2">{error}</div>}
+          {/* Notifications */}
+          {error && (
+            <div className="mb-3 rounded border border-red-200 bg-red-50 text-red-800 text-sm px-3 py-2">
+              {error}
+            </div>
+          )}
           {toast && (
-            <div className="mb-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2 flex">
+            <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm px-3 py-2 flex items-center">
               <span className="mr-auto">{toast}</span>
-              <button onClick={() => setToast("")} className="text-emerald-600">×</button>
+              <button onClick={() => setToast("")} className="text-emerald-600 ml-2 leading-none">×</button>
             </div>
           )}
 
           {tab === "exceptions" && (
-            <div className={`grid gap-4 ${selected ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]" : ""}`}>
+            <div className={`grid gap-4 ${selected ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]" : ""}`}>
               <ExceptionTable
                 batch={batch}
                 exceptions={exceptions}
@@ -240,74 +242,95 @@ export default function App() {
             </div>
           )}
           {tab === "memory" && <MemoryInspector status={status} />}
-          {tab === "audit" && <AuditLog />}
+          {tab === "audit"  && <AuditLog />}
         </section>
       </main>
     </div>
   );
 }
 
+/* ── Header status indicator ───────────────────────────────────────────── */
+function StatusDot({ ok, okLabel, failLabel, detail }) {
+  return (
+    <span title={detail} className="inline-flex items-center gap-1.5 text-xs text-slate-500 cursor-default">
+      <span className={`w-1.5 h-1.5 rounded-full ${ok ? "bg-emerald-500" : "bg-amber-400"}`} />
+      {ok ? okLabel : failLabel}
+    </span>
+  );
+}
+
+/* ── Exception table ────────────────────────────────────────────────────── */
 function ExceptionTable({ batch, exceptions, selected, onSelect }) {
   if (!batch) return null;
   if (batch.status !== "processed")
     return (
-      <div className="bg-white rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-        {batch.name} has {batch.invoices} invoices waiting. Run the three-way match to find exceptions.
+      <div className="bg-white border border-dashed border-slate-300 rounded-md p-10 text-center text-sm text-slate-500">
+        {batch.name} · {batch.invoices} invoices pending.
+        <br />
+        <span className="text-slate-400">Run the three-way match to detect exceptions.</span>
       </div>
     );
   if (!exceptions.length)
-    return <div className="bg-white rounded-lg border p-6 text-sm text-slate-500">No exceptions in this batch.</div>;
+    return (
+      <div className="bg-white border border-slate-200 rounded-md p-6 text-sm text-slate-500">
+        No exceptions in this batch.
+      </div>
+    );
+
   return (
-    <div className="bg-white rounded-lg border border-slate-200 overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500 text-left">
-          <tr>
-            <th className="px-3 py-2">Invoice</th>
-            <th className="px-3 py-2">Exception</th>
-            <th className="px-3 py-2">Agent</th>
-            <th className="px-3 py-2">Human decision</th>
+    <div className="bg-white border border-slate-200 rounded-md overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50">
+            <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Invoice</th>
+            <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Exception</th>
+            <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Agent</th>
+            <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Decision</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-100">
           {exceptions.map((e) => {
             const r = e.recommendation;
             const d = e.decision;
+            const isSelected = selected === e.id;
             return (
               <tr
                 key={e.id}
                 onClick={() => onSelect(e.id)}
-                className={`border-t border-slate-100 cursor-pointer ${
-                  selected === e.id ? "bg-indigo-50" : "hover:bg-slate-50"
+                className={`cursor-pointer transition-colors ${
+                  isSelected ? "bg-indigo-50/70" : "hover:bg-slate-50"
                 }`}
               >
-                <td className="px-3 py-2">
-                  <div className="font-medium">{e.invoice.number}</div>
-                  <div className="text-xs text-slate-500 truncate max-w-[180px]">{e.vendor.name}</div>
+                <td className="px-4 py-3">
+                  <div className="font-medium text-slate-900 tabular-nums">{e.invoice.number}</div>
+                  <div className="text-xs text-slate-500 mt-0.5 truncate max-w-[160px]">{e.vendor.name}</div>
                 </td>
-                <td className="px-3 py-2">
-                  <div>{TYPE_LABEL[e.type]}</div>
-                  <div className="text-xs text-slate-500">{fmtSize(e)}</div>
+                <td className="px-4 py-3">
+                  <div className="text-slate-700">{TYPE_LABEL[e.type]}</div>
+                  <div className="text-xs text-slate-500 mt-0.5 tabular-nums">{fmtSize(e)}</div>
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3">
                   {r ? (
-                    <div className="flex items-center gap-2">
+                    <div>
                       <ActionPill action={r.action} />
-                      <span className="text-xs text-slate-500">
-                        {r.cited_ids.length ? `${r.cited_ids.length} cited` : "no precedent"}
-                      </span>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {r.cited_ids.length ? `${r.cited_ids.length} precedent${r.cited_ids.length !== 1 ? "s" : ""}` : "no precedent"}
+                      </div>
                     </div>
                   ) : (
                     <span className="text-xs text-slate-400">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3">
                   {d ? (
-                    <div className="flex items-center gap-2">
+                    <div>
                       <ActionPill action={d.decision} />
-                      {d.is_override && <span className="text-xs text-rose-600">override</span>}
+                      {d.is_override && (
+                        <div className="text-xs text-rose-600 mt-0.5">override</div>
+                      )}
                     </div>
                   ) : (
-                    <span className="text-xs text-amber-600">awaiting approver</span>
+                    <span className="text-xs text-slate-400">Pending</span>
                   )}
                 </td>
               </tr>
