@@ -107,7 +107,8 @@ def test_hindsight_recall_maps_facts_to_records_and_drops_unmappable():
     assert out[0].score == 0.9 and out[0].vendor_code == "V01"
     assert out[2].text.startswith("Vendor pattern")
     _, bank, query, kw = fake.calls[-1]
-    assert kw["tags"] == ["vendor:V01", "type:price_variance"] and kw["tags_match"] == "any_strict"
+    assert kw["tags"] == ["vendor:V01", "type:price_variance"]
+    assert [c[3]["tags_match"] for c in fake.calls if c[0] == "recall"] == ["all_strict", "any_strict"]
     assert kw["include_chunks"] is True
     assert "Northwind" in query and "+5.20%" in query
 
@@ -180,6 +181,20 @@ def test_real_hindsight_client_builds_valid_requests():
     assert item["content"].startswith("[MEMORYOPS PREC-0001]") and "vendor:V01" in item["tags"]
 
     out = hs.recall(RecallQuery(vendor_code="V01", vendor_name="N", exception_type="price_variance"))
-    assert sent["recall"][1]["tags_match"] == "any_strict"
+    assert sent["recall"][1]["tags_match"] in ("all_strict", "any_strict")
     assert out[0].id == "PREC-0001" and out[0].text.startswith("On 2026-06-18") and out[0].fields["decision"] == "approved"
     hs.close()
+
+
+def test_hindsight_exact_matches_are_never_crowded_out():
+    class TwoStage(FakeHindsight):
+        def recall(self, bank_id, query, **kw):
+            self.calls.append(("recall", bank_id, query, kw))
+            if kw["tags_match"] == "all_strict":
+                return NS(results=[fact("e1", "x", document_id="PREC-0001")], chunks={})
+            return NS(results=[fact(f"o{i}", "x", document_id=f"PREC-01{i:02d}", score=0.99) for i in range(9)]
+                      + [fact("e1b", "x", document_id="PREC-0001")], chunks={})
+
+    hs = HindsightMemoryStore("http://x", None, "bank", client=TwoStage([]))
+    out = hs.recall(RecallQuery(vendor_code="V01", vendor_name="N", exception_type="price_variance"), k=5)
+    assert out[0].id == "PREC-0001" and len(out) == 5 and len({r.id for r in out}) == 5

@@ -104,6 +104,17 @@ class HindsightMemoryStore(MemoryStore):
         self._call(lambda: self.client.retain_batch(self.bank_id, items))
 
     def recall(self, query: RecallQuery, k: int = 5) -> list[RecalledMemory]:
+        """Exact matches first (vendor AND type), so other vendors can never crowd relevant precedents
+        out of the top k; any remaining slots are topped up with vendor-OR-type matches, which the
+        recommender shows for transparency but never cites."""
+        exact = self._recall_once(query, "all_strict")
+        if len(exact) >= k:
+            return exact[:k]
+        seen = {r.id for r in exact}
+        broader = [r for r in self._recall_once(query, "any_strict") if r.id not in seen]
+        return (exact + broader)[:k]
+
+    def _recall_once(self, query: RecallQuery, tags_match: str) -> list[RecalledMemory]:
         resp = self._call(
             lambda: self.client.recall(
                 self.bank_id,
@@ -114,7 +125,7 @@ class HindsightMemoryStore(MemoryStore):
                 include_chunks=True,
                 max_chunk_tokens=4000,
                 tags=[f"vendor:{query.vendor_code}", f"type:{query.exception_type}"],
-                tags_match="any_strict",
+                tags_match=tags_match,
             )
         )
         chunks = getattr(resp, "chunks", None) or {}
@@ -143,7 +154,7 @@ class HindsightMemoryStore(MemoryStore):
                 source="hindsight",
             )
             order.append(rid)
-        return [grouped[r] for r in order][:k]
+        return [grouped[r] for r in order]
 
     def _identify(self, res, chunks) -> tuple[str | None, dict, str | None]:
         md = dict(getattr(res, "metadata", None) or {})

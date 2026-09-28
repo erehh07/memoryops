@@ -195,7 +195,7 @@ export default function App() {
         </aside>
 
         <section className="min-w-0">
-          <nav className="flex gap-1 mb-3">
+          <nav className="flex flex-wrap gap-1 mb-3">
             {[
               ["exceptions", "Exceptions"],
               ["memory", "Memory inspector"],
